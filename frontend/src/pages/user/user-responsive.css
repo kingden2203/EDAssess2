@@ -1,0 +1,186 @@
+/* 📁 frontend/src/pages/user/user-responsive.css
+   Mobile/tablet overrides para sa student panel.
+   Naka-import PINAKAHULI sa UserLayout.jsx kaya nananalo ito sa user.css.
+   Hindi na kailangang galawin ang user.css (pwedeng iwan ang lumang
+   @media (max-width: 1024px) block dahil compatible ito). */
+
+/* ── Desktop defaults: nakatago ang mga mobile-only controls ─────────────── */
+.user-menu-btn,
+.user-sidebar-close,
+.user-sidebar-backdrop { display: none; }
+
+/* Pigilan ang malalapad na child na itulak palabas ang layout */
+.user-main { min-width: 0; }
+.user-two-col > *,
+.exam-question-area { min-width: 0; }
+
+/* ── ≤ 900px : sidebar nagiging drawer ───────────────────────────────────── */
+@media (max-width: 900px) {
+  .user-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    z-index: 120;
+    width: 40px;
+    height: 40px;
+    background: var(--user-surface);
+    border: 1px solid var(--user-border);
+    border-radius: var(--user-radius);
+    color: var(--user-text);
+    box-shadow: var(--user-shadow);
+    cursor: pointer;
+  }
+
+  .user-sidebar {
+    width: min(280px, 86vw);
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow-y: auto;
+    z-index: 140;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .user-sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    box-shadow: var(--user-shadow-lg);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, visibility 0s;
+  }
+
+  .user-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    background: rgba(28, 25, 23, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .user-sidebar-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  .user-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--user-text-muted);
+    cursor: pointer;
+  }
+  .user-sidebar-close:hover { background: var(--user-bg); color: var(--user-text); }
+
+  .user-nav-item { padding: 12px 10px; } /* mas malaking tap area */
+
+  .user-main { margin-left: 0; }
+
+  /* Mag-iwan ng espasyo sa kaliwa para sa hamburger button */
+  .user-topbar { padding: 0 16px 0 64px; }
+  .user-topbar-left { flex: 1; min-width: 0; }
+  .user-topbar-right { flex-shrink: 0; }
+  .user-topbar-left h1,
+  .user-topbar-left p {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* ── ≤ 768px : Exam page ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .module-cards { grid-template-columns: 1fr; }
+
+  .exam-header {
+    height: auto;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .exam-header-left { flex: 1 1 100%; min-width: 0; }
+  .exam-header-title { font-size: 14px; }
+  .exam-timer { font-size: 18px; padding: 6px 12px; letter-spacing: 1px; }
+  .exam-header .exam-btn-submit { margin-left: auto; }
+
+  /* Toast sa ibaba para hindi matakpan ng mas matangkad na header */
+  .exam-warning-toast {
+    top: auto;
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+
+  .exam-body { padding: 12px; gap: 16px; }
+
+  /* Tanong muna, saka ang question navigator sa ibaba */
+  .exam-question-area { order: 1; width: 100%; }
+  .exam-nav-panel     { order: 2; }
+
+  .exam-nav-grid {
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+    gap: 6px;
+  }
+  .exam-nav-btn { width: 100%; height: 38px; font-size: 12px; }
+
+  .exam-q-header { padding: 14px 16px; }
+  .exam-q-body   { padding: 20px 16px; }
+  .exam-q-text   { font-size: 15px; margin-bottom: 20px; }
+  .exam-choice   { padding: 12px 14px; gap: 12px; }
+
+  .exam-q-footer { padding: 12px; gap: 8px; }
+  .exam-q-footer .exam-btn { flex: 1; justify-content: center; padding: 10px 12px; font-size: 13px; }
+}
+
+/* ── ≤ 640px : Dashboard at iba pang student pages ───────────────────────── */
+@media (max-width: 640px) {
+  .user-content { padding: 16px; }
+
+  .user-card-header { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+  .user-card-body   { padding: 16px; }
+
+  .user-two-col,
+  .user-three-col { grid-template-columns: 1fr; gap: 16px; }
+  .user-stats-grid { gap: 12px; }
+  .exam-sel-card   { padding: 20px 18px; }
+
+  /* Catch-all: lahat ng inline na "gridTemplateColumns" sa loob ng content
+     (GWA categories, Strongest/Focus callouts, atbp.) ay nagiging 1 column.
+     Gumagana rin sa ibang student pages na may ganitong inline grid. */
+  .user-content [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Optional classNames (tingnan ang UserDashboard edits) */
+  .user-gwa-banner  { flex-wrap: wrap; }
+  .user-subject-head { flex-wrap: wrap; gap: 4px 12px; }
+
+  /* Malalapad na table: pahalang na scroll sa halip na lumampas sa screen */
+  .user-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .user-table th,
+  .user-table td { padding: 10px 12px; }
+
+  .result-hero    { padding: 28px 16px 24px; }
+  .result-verdict { font-size: 20px; }
+}
+
+/* ── ≤ 480px : maliliit na phone ─────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .user-topbar-left p { display: none; } /* itago ang mahabang greeting */
+  .user-stat-card  { padding: 14px; }
+  .user-stat-value { font-size: 22px; }
+  .quick-card      { padding: 18px 16px; }
+}

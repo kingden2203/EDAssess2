@@ -126,3 +126,22 @@
   .hero-float { display: none; }
   .hero-stats { flex-wrap: wrap; row-gap: 18px; }
 }
+
+/* ── Responsive additions ── */
+@media (max-width: 1000px) {
+  .hero-seal, .hero-float { display: none; }
+}
+@media (max-width: 700px) {
+  .hero { padding: 56px 20px 40px; }
+  .hero-inner { padding-top: 0; }
+  .hero-eyebrow { max-width: none; }
+  .hero-subtitle { font-size: 1rem; margin-bottom: 28px; }
+  .hero-ctas { margin-bottom: 40px; }
+  .hero-stat-divider { display: none; }
+  .hero-stats { gap: 18px 28px; padding-top: 24px; }
+}
+@media (max-width: 480px) {
+  .hero-title { font-size: 2.2rem; }
+  .hero-ctas .btn-primary,
+  .hero-ctas .btn-ghost { flex: 1 1 100%; justify-content: center; }
+}

@@ -237,3 +237,29 @@
 .password-toggle-btn:hover {
   color: var(--prmsu-gold);
 }
+
+/* ── Mobile fixes ── */
+/* Dati: width:100vw + padding 20px na walang border-box, kaya lumalampas
+   ang backdrop sa screen at nalilipat ang modal pakanan. */
+.auth-enhanced-backdrop {
+  box-sizing: border-box;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+@media (max-width: 480px) {
+  .auth-enhanced-backdrop { padding: 12px; align-items: flex-start !important; }
+  .auth-enhanced-container {
+    max-height: calc(100vh - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+    padding: 32px 18px 24px !important;
+  }
+  .serif-title { font-size: 1.5rem; }
+  .modal-header.centered { margin-bottom: 22px; }
+  /* 16px para hindi mag-zoom ang iPhone kapag nag-focus sa input */
+  .sans-input { font-size: 16px !important; padding-top: 13px !important; padding-bottom: 13px !important; }
+  .enhanced-submit-btn { padding: 15px !important; }
+  .enhanced-close-btn { top: 10px; right: 10px; padding: 10px; }
+  .modal-footer { margin-top: 24px; }
+}

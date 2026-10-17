@@ -18,6 +18,7 @@
   align-items: center;
   gap: 12px;
   text-decoration: none;
+  min-width: 0;
 }
 
 .nav-seal {
@@ -42,6 +43,23 @@
   font-size: 0.68rem;
   color: var(--slate);
 }
+
+/* Hamburger: nakatago sa desktop */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.nav-toggle:hover { border-color: var(--navy); }
 
 .nav-links {
   display: flex;
@@ -92,11 +110,47 @@
 }
 .register-btn:hover { background: var(--ink); }
 
+/* ── Mobile: dropdown menu sa ilalim ng navbar ───────────────────────────── */
 @media (max-width: 860px) {
   .navbar { padding: 12px 20px; }
   .nav-wordmark span:last-child { display: none; }
-  .nav-links { gap: 14px; }
-  .nav-links li:nth-child(2),
-  .nav-links li:nth-child(3),
-  .nav-links li:nth-child(4) { display: none; }
+
+  .nav-toggle { display: inline-flex; }
+
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 8px 20px 20px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 18px 30px -18px rgba(18, 23, 46, 0.25);
+    max-height: calc(100vh - 64px);
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
+  }
+  .nav-links.open { display: flex; }
+
+  .nav-links li { width: 100%; }
+
+  .nav-links li > a {
+    display: block;
+    padding: 14px 0;
+    font-size: 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-links a:hover,
+  .nav-links a.active { border-bottom-color: var(--line); }
+
+  .nav-links .nav-cta {
+    width: 100%;
+    margin-top: 12px;
+    padding: 13px 20px;
+    font-size: 1rem;
+  }
 }
