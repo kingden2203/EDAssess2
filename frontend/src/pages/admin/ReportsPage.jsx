@@ -45,9 +45,6 @@ export default function ReportsPage() {
           <button className="btn btn-secondary btn-sm">
             <Download size={13} /> Export PDF
           </button>
-          <button className="btn btn-secondary btn-sm">
-            <Download size={13} /> Export CSV
-          </button>
         </div>
       </div>
 
