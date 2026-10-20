@@ -1,3 +1,4 @@
+// frontend/src/pages/instructor/QuestionBankPage.jsx
 import { useState, useRef } from 'react';
 import { BookOpen, Plus, Search, Edit2, Trash2, X, Upload, FileText, CheckCircle, AlertCircle, Copy, ClipboardCheck } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -39,7 +40,7 @@ async function extractPdfLines(file) {
 
 // ── Structured exam parser ──────────────────────────────────────────────
 //   1. Question stem...
-//   A. Choice  B. Choice  C. Choice  D. Choice   (bawat choice sa hiwalay na linya)
+//   A. Choice  B. Choice  C. Choice  D. Choice   (each choice on its own line)
 //   Part II: Answer Key and Detailed Explanations
 //   41. C. Semantic
 //   Rationale: ...
@@ -169,7 +170,7 @@ function mergeExamText(text) {
       return;
     }
 
-    // Tamang sagot → rationale; mali → Wrong Answer Explanation ng letter na 'yon.
+    // Correct answer → rationale; wrong answers → that letter's Wrong Answer Explanation.
     const choiceExplanations = ['A', 'B', 'C', 'D'].map((letter, i) => {
       if (i === answerIndex) return (key.rationale || '').trim();
       return (key.wrongExplanations[letter] || '').trim();
@@ -219,13 +220,19 @@ export default function QuestionBankPage() {
   const [editItem,  setEditItem]  = useState(null);
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
-  // Sariling questions lang ang binabalik ng backend para sa instructor.
+  // The backend only returns the instructor's own questions.
   const filtered = questions.filter((q) => {
     const matchSearch = q.question.toLowerCase().includes(search.toLowerCase());
     const matchCat    = filter === 'All' || q.category === filter;
     return matchSearch && matchCat;
   });
+
+  // Every question in the selected category (ignores the search box).
+  const categoryQuestions = filter === 'All'
+    ? []
+    : questions.filter((q) => q.category === filter);
 
   const openAdd = () => {
     setEditItem(null);
@@ -270,7 +277,7 @@ export default function QuestionBankPage() {
       subject: form.subject.trim() || (form.category === 'Major' ? form.major : form.category),
       major: form.category === 'Major' ? form.major : null,
     };
-    // Hinuhulaan na ng backend ang department mula sa major
+    // Backend infers the department from the major
     delete payload.department;
 
     try {
@@ -293,6 +300,41 @@ export default function QuestionBankPage() {
       await removeQuestion(id);
     } catch (err) {
       alert(apiError(err, 'Failed to delete question.'));
+    }
+  };
+
+  // Deletes every question in the currently selected category.
+  const handleDeleteAllInCategory = async () => {
+    if (filter === 'All' || categoryQuestions.length === 0) return;
+
+    const count = categoryQuestions.length;
+    const ok = confirm(
+      `Delete ALL ${count} ${filter} question${count === 1 ? '' : 's'}?\n\n` +
+      `They will also be removed from any exam that includes them. This cannot be undone.`
+    );
+    if (!ok) return;
+
+    setDeletingAll(true);
+    let failed = 0;
+    let lastError = null;
+
+    // Sequential on purpose so the hook's local state updates stay consistent.
+    for (const q of categoryQuestions) {
+      try {
+        await removeQuestion(q.id);
+      } catch (err) {
+        failed += 1;
+        lastError = err;
+      }
+    }
+
+    setDeletingAll(false);
+
+    if (failed > 0) {
+      alert(
+        `Deleted ${count - failed} of ${count} ${filter} questions. ${failed} failed.\n` +
+        apiError(lastError, 'Some questions could not be deleted.')
+      );
     }
   };
 
@@ -382,10 +424,20 @@ export default function QuestionBankPage() {
       <div className="inst-content">
         <div className="inst-card">
           <div className="inst-card-header">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {CATEGORIES.map((cat) => (
                 <button key={cat} className={`inst-btn inst-btn-sm ${filter === cat ? 'inst-btn-primary' : 'inst-btn-secondary'}`} onClick={() => setFilter(cat)}>{cat}</button>
               ))}
+              {filter !== 'All' && categoryQuestions.length > 0 && (
+                <button
+                  className="inst-btn inst-btn-secondary inst-btn-sm"
+                  onClick={handleDeleteAllInCategory}
+                  disabled={deletingAll}
+                  style={{ color: 'var(--inst-danger)', borderColor: 'var(--inst-danger)' }}
+                >
+                  <Trash2 size={13} /> {deletingAll ? 'Deleting...' : `Delete all ${filter} (${categoryQuestions.length})`}
+                </button>
+              )}
             </div>
             <div className="inst-search">
               <Search size={15} />
