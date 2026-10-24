@@ -8,10 +8,9 @@ import useAuthStore from '../../auth/useAuthStore';
 import authApi from '../../api/authApi';
 import ProfileModal from '../../components/ProfileModal';
 import './instructor.css';
-import '../../styles/dept-theme.css'; // dapat nasa ilalim ng instructor.css
+import '../../styles/dept-theme.css'; 
 
-// permKey = permission sa Access Control na nagpapakita/nagtatago ng nav item.
-// Announcements: wala pang sariling permission, kaya null (laging bisible).
+
 const NAV_ITEMS = [
   { to: '/instructor',               label: 'Dashboard',       icon: LayoutDashboard, end: true, permKey: 'viewDashboard' },
   { to: '/instructor/questions',     label: 'Question Bank',   icon: BookOpen,        permKey: 'configureExams' },

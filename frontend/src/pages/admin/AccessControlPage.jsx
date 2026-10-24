@@ -41,7 +41,7 @@ const PERMISSION_LABELS = {
   viewDashboard:     { label: 'View Dashboard',      desc: 'Access to the main dashboard page' },
   manageUsers:       { label: 'Manage Users',        desc: 'Create, edit, and deactivate accounts in their own department' },
   configureExams:    { label: 'Exams & Questions',   desc: 'Build exams and manage the question bank' },
-  viewReports:       { label: 'View Reports',        desc: 'Performance analytics and student monitoring' },
+  viewReports:       { label: 'Student Monitor',        desc: 'Monitor student performance and exam attempts' },
   manageAccess:      { label: 'Department Access Control', desc: 'Let department admins control what their instructors and students can use' },
   takeExams:         { label: 'Take Exams',          desc: 'Participate in assessments as a student' },
   viewReviewModules: { label: 'View Review Modules', desc: 'Access LET review materials' },

@@ -112,7 +112,7 @@ export default function SettingsPage() {
                   <div className="form-input-with-unit">
                     <input
                       type="number"
-                      min={5}
+                      min={1}
                       max={480}
                       value={settings.sessionTimeout}
                       onChange={(e) => handleChange('sessionTimeout', Number(e.target.value))}
@@ -146,8 +146,8 @@ export default function SettingsPage() {
                   },
                   {
                     key: 'emailNotifications',
-                    label: 'Email Notifications',
-                    desc: 'Send system emails for registrations and results',
+                    label: 'Announcements',
+                    desc: 'Show announcements to students and let instructors post them',
                   },
                   {
                     key: 'auditLogging',

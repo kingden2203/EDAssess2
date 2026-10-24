@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Flag, ChevronLeft, ChevronRight, Send, X, Clock } from 'lucide-react';
 import useQuestionBank from '../../hooks/useQuestionBank';
+import useExamTimer from '../../hooks/useExamTimer';
 import { examApi } from '../../api/examApi';
 
 const CATEGORY_MAP = { gened: 'GenEd', profed: 'ProfEd', major: 'Major' };
@@ -47,13 +48,21 @@ export default function ExamPage() {
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [questions, setQuestions] = useState([]);
-  const [questionsReady, setQuestionsReady] = useState(false); // ← nawala, na-restore
+  const [questionsReady, setQuestionsReady] = useState(false);
+  const [config, setConfig] = useState(null);       // global exam config (autoSubmit, maxAttempts, ...)
+  const [attemptsUsed, setAttemptsUsed] = useState(0);
+
+  // Exam config: kailangan bago magsimula ang timer para tama ang autoSubmit
+  useEffect(() => {
+    examApi.getExamConfig().then(setConfig).catch(() => setConfig({}));
+  }, []);
 
   useEffect(() => {
     async function loadQuestions() {
       if (examId) {
         try {
           const exam = await examApi.getExamById(examId);
+          setAttemptsUsed(exam.attempts_used ?? 0);
           const mapped = exam.questions.map((q) => ({
             id: q.id,
             question: q.question,
@@ -91,46 +100,31 @@ export default function ExamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, bankLoading]);
 
+  const configReady   = config !== null;
+  const autoSubmit    = config?.autoSubmit ?? true;
+  const attemptLimit  = config?.maxAttempts ?? 1; // 0 = unlimited
+  const locked        = !!examId && configReady && questionsReady && attemptLimit > 0 && attemptsUsed >= attemptLimit;
+
+  // Hindi puwedeng pumasok kung naubos na ang attempts (kahit i-type pa ang URL)
+  useEffect(() => {
+    if (locked) {
+      alert(`You have already used your ${attemptLimit} attempt(s) for this exam.`);
+      navigate('/dashboard/selection', { replace: true });
+    }
+  }, [locked, attemptLimit, navigate]);
+
   const [current,  setCurrent]   = useState(0);
   const [navPage,  setNavPage]   = useState(0);
   const [answers,  setAnswers]   = useState({});
   const [flagged,  setFlagged]   = useState(new Set());
-  const [timeLeft, setTimeLeft]  = useState(durationMin * 60);
   const [toast,    setToast]     = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
-
-  const warningsRef = useRef(WARNINGS.map((w) => ({ ...w })));
-  const toastTimer  = useRef(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Timer ─────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!questionsReady) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleSubmit(true);
-          return 0;
-        }
-
-        warningsRef.current.forEach((w) => {
-          if (!w.shown && prev <= w.at + 1 && prev >= w.at) {
-            w.shown = true;
-            showToast(w.label);
-          }
-        });
-
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [questionsReady]);
-
-  useEffect(() => {
-    setNavPage(Math.floor(current / NAV_PAGE_SIZE));
-  }, [current]);
+  const warningsRef   = useRef(WARNINGS.map((w) => ({ ...w })));
+  const toastTimer    = useRef(null);
+  const submittingRef = useRef(false);
+  const timeLeftRef   = useRef(durationMin * 60);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -138,43 +132,19 @@ export default function ExamPage() {
     toastTimer.current = setTimeout(() => setToast(null), 8000);
   };
 
-  const formatTime = (secs) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    return h > 0
-      ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-      : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  const timerClass = timeLeft <= 5 * 60
-    ? 'exam-timer danger'
-    : timeLeft <=10 * 60
-    ? 'exam-timer warning'
-    : 'exam-timer normal';
-
-  const handleAnswer = (choiceIdx) => {
-    setAnswers((prev) => ({ ...prev, [current]: choiceIdx }));
-  };
-
-  const toggleFlag = () => {
-    setFlagged((prev) => {
-      const next = new Set(prev);
-      next.has(current) ? next.delete(current) : next.add(current);
-      return next;
-    });
-  };
-
-  const handleSubmit = useCallback(async (autoSubmit = false) => {
-    if (submitting) return;
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = useCallback(async (isAuto = false) => {
+    if (submittingRef.current) return; // iwas double submit (manual + auto)
+    submittingRef.current = true;
     setSubmitting(true);
+    setShowConfirm(false);
 
     const score = questions.reduce((acc, q, i) => {
       return answers[i] === q.answer ? acc + 1 : acc;
     }, 0);
 
     const pct = Math.round((score / questions.length) * 100);
-    const timeTaken = durationMin * 60 - timeLeft;
+    const timeTaken = Math.max(0, durationMin * 60 - timeLeftRef.current);
     const category = CATEGORY_MAP[examType] || 'GenEd';
 
     const subjectBreakdown = questions.reduce((acc, q, i) => {
@@ -188,6 +158,7 @@ export default function ExamPage() {
     let savedAttempt = null;
     try {
       savedAttempt = await examApi.createAttempt({
+        ...(examId ? { exam: examId } : {}),
         exam_type: examType,
         category,
         label,
@@ -196,11 +167,16 @@ export default function ExamPage() {
         percentage: pct,
         passed: pct >= 75,
         time_taken_seconds: timeTaken,
-        auto_submit: autoSubmit,
+        auto_submit: isAuto,
         subject_breakdown: subjectBreakdown,
         detail: { questions, answers },
       });
     } catch (err) {
+      if (err.response?.status === 403) {
+        alert(err.response?.data?.detail || 'You are not allowed to submit this exam.');
+        navigate('/dashboard/selection', { replace: true });
+        return;
+      }
       console.error('Failed to save exam attempt:', err);
     }
 
@@ -215,17 +191,71 @@ export default function ExamPage() {
         total:      questions.length,
         percentage: pct,
         timeTaken,
-        autoSubmit,
+        autoSubmit: isAuto,
         answers,
         questions,
         subjectBreakdown,
       },
     });
-  }, [questions, answers, timeLeft, navigate, examType, label, short, color, durationMin, submitting]);
+  }, [questions, answers, navigate, examType, examId, label, short, color, durationMin]);
+
+  // ── Timer (clock-based, walang stale closure) ─────────────────────────────
+  const { timeLeft, timeUp } = useExamTimer({
+    durationMin,
+    autoSubmit,
+    ready: questionsReady && configReady && !locked && questions.length > 0,
+    onExpire: handleSubmit,
+  });
+  timeLeftRef.current = timeLeft;
+
+  // 30 / 10 / 5 minute warnings (laktawan kung mas maikli ang exam kaysa sa warning)
+  useEffect(() => {
+    if (!questionsReady || locked || questions.length === 0) return;
+    warningsRef.current.forEach((w) => {
+      if (!w.shown && w.at < durationMin * 60 && timeLeft <= w.at && timeLeft > 0) {
+        w.shown = true;
+        showToast(w.label);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft]);
+
+  useEffect(() => {
+    setNavPage(Math.floor(current / NAV_PAGE_SIZE));
+  }, [current]);
+
+  const formatTime = (secs) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const timerClass = timeLeft <= 5 * 60
+    ? 'exam-timer danger'
+    : timeLeft <= 10 * 60
+    ? 'exam-timer warning'
+    : 'exam-timer normal';
+
+  const handleAnswer = (choiceIdx) => {
+    if (timeUp) return; // naka-lock na ang sagot kapag tapos na ang oras
+    setAnswers((prev) => ({ ...prev, [current]: choiceIdx }));
+  };
+
+  const toggleFlag = () => {
+    setFlagged((prev) => {
+      const next = new Set(prev);
+      next.has(current) ? next.delete(current) : next.add(current);
+      return next;
+    });
+  };
 
   if (!state) return null;
+  if (locked) return null;
 
-  if (bankLoading || !questionsReady) {
+  if (bankLoading || !questionsReady || !configReady) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <p style={{ color: 'var(--user-text-sub)' }}>Loading exam questions...</p>
@@ -246,7 +276,6 @@ export default function ExamPage() {
   const answered    = Object.keys(answers).length;
   const progress    = ((current + 1) / questions.length) * 100;
   const isFlagged   = flagged.has(current);
-  const isAnswered  = answers[current] !== undefined;
   const isLast      = current === questions.length - 1;
 
   const totalNavPages = Math.ceil(questions.length / NAV_PAGE_SIZE) || 1;
@@ -266,6 +295,16 @@ export default function ExamPage() {
         </div>
       )}
 
+      {/* Auto-submit OFF: tapos na ang oras, hindi na puwedeng magsagot, pero kailangan pang mag-submit */}
+      {timeUp && !autoSubmit && !submitting && (
+        <div className="exam-warning-toast">
+          <AlertTriangle size={18} />
+          <span className="exam-warning-toast-text">
+            ⏰ Time&apos;s up — your answers are locked. Please submit your exam.
+          </span>
+        </div>
+      )}
+
       <div className="exam-header">
         <div className="exam-header-left">
           <span className="exam-header-title">{label} — LET Simulation</span>
@@ -280,6 +319,7 @@ export default function ExamPage() {
         <button
           className="exam-btn exam-btn-submit"
           onClick={() => setShowConfirm(true)}
+          disabled={submitting}
           style={{ padding: '8px 16px', fontSize: 13 }}
         >
           <Send size={14} /> Submit Exam
@@ -370,6 +410,7 @@ export default function ExamPage() {
                     key={i}
                     className={`exam-choice ${answers[current] === i ? 'selected' : ''}`}
                     onClick={() => handleAnswer(i)}
+                    style={timeUp ? { cursor: 'not-allowed', opacity: 0.8 } : undefined}
                   >
                     <div className="exam-choice-letter">
                       {String.fromCharCode(65 + i)}
@@ -401,6 +442,7 @@ export default function ExamPage() {
                 <button
                   className="exam-btn exam-btn-submit"
                   onClick={() => setShowConfirm(true)}
+                  disabled={submitting}
                 >
                   <Send size={14} /> Submit
                 </button>

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { ClipboardList, Plus, Trash2, X, Clock, BookOpen, Save } from 'lucide-react';
 import { examApi } from '../../api/examApi';
 import useAuthStore from '../../auth/useAuthStore';
-import MajorPicker from '../../components/MajorPicker';
+import MajorField from '../../components/MajorField';
 import apiError from '../../utils/apiError';
 
 // LET-based default durations
@@ -396,7 +396,7 @@ export default function ExamBuilderPage() {
 
               {/* Major: buttons para sa major ng department */}
               {form.category === 'Major' && (
-                <MajorPicker
+                <MajorField
                   department={user?.department}
                   label="Exam is for"
                   value={form.major}

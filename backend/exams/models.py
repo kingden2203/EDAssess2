@@ -115,6 +115,9 @@ class ExamAttempt(models.Model):
         related_name='exam_attempts',
     )
 
+    exam = models.ForeignKey(
+        'Exam', null=True, blank=True, on_delete=models.SET_NULL, related_name='attempts'
+    )
     exam_type = models.CharField(max_length=20)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     label = models.CharField(max_length=255)
@@ -156,8 +159,8 @@ class ExamConfig(models.Model):
     showResults = models.BooleanField(default=True)
     allowReview = models.BooleanField(default=False)
     shuffleQuestions = models.BooleanField(default=True)
-    shuffleChoices = models.BooleanField(default=False)
 
+    # 0 = unlimited
     maxAttempts = models.PositiveIntegerField(default=1)
 
     updated_at = models.DateTimeField(auto_now=True)
@@ -180,3 +183,8 @@ class ExamConfig(models.Model):
 
     def __str__(self):
         return "Global Exam Configuration"
+
+
+def count_attempts(user, exam):
+    """Ilang beses nang nag-submit ang user ng exam na ito."""
+    return ExamAttempt.objects.filter(user=user, exam=exam).count()

@@ -3,7 +3,7 @@ from rest_framework import serializers
 from accounts.models import MAJOR_CHOICES, department_of_major
 from .models import (
     Choice, Exam, ExamAttempt, ExamConfig, Question,
-    MAJOR_TARGET_CHOICES, MAX_QUESTIONS_PER_EXAM,
+    MAJOR_TARGET_CHOICES, MAX_QUESTIONS_PER_EXAM, count_attempts,
 )
 
 
@@ -15,6 +15,12 @@ def _check_major_for_user(major, user):
     if user is not None and getattr(user, 'department', None) and dept != user.department:
         raise serializers.ValidationError(
             {'major': f'{major} is not a {user.department} major.'}
+        )
+    # Instructor na may major: sariling major lang ang puwede niyang gawan ng question/exam
+    if (user is not None and getattr(user, 'role', None) == 'instructor'
+            and getattr(user, 'major', None) and major != user.major):
+        raise serializers.ValidationError(
+            {'major': f'You can only manage {user.major} questions and exams.'}
         )
     return dept
 
@@ -135,6 +141,15 @@ class ExamSerializer(serializers.ModelSerializer):
     major = serializers.ChoiceField(
         choices=MAJOR_CHOICES, required=False, allow_null=True, allow_blank=True
     )
+    attempts_used = serializers.SerializerMethodField()
+
+    def get_attempts_used(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or getattr(user, 'role', None) != 'user':
+            return None
+        return count_attempts(user, obj)
+
     # Hinuhulaan mula sa major; read lang para sa frontend.
     department = serializers.ChoiceField(
         choices=MAJOR_TARGET_CHOICES, required=False, allow_null=True, allow_blank=True
@@ -145,7 +160,7 @@ class ExamSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'category', 'status',
             'duration_minutes', 'passing_score', 'is_active',
-            'questions', 'question_ids', 'major', 'department', 'created_at',
+            'questions', 'question_ids', 'major', 'department', 'created_at', 'attempts_used',
         ]
 
     def validate(self, attrs):
@@ -174,7 +189,7 @@ class ExamAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamAttempt
         fields = [
-            'id', 'user', 'exam_type', 'category', 'label',
+            'id', 'user', 'exam', 'exam_type', 'category', 'label',
             'score', 'total', 'percentage', 'passed',
             'time_taken_seconds', 'auto_submit', 'subject_breakdown', 'detail', 'created_at'
         ]
@@ -187,7 +202,7 @@ class ExamConfigSerializer(serializers.ModelSerializer):
         fields = [
             'genEd', 'profEd', 'major',
             'autoSubmit', 'showResults', 'allowReview',
-            'shuffleQuestions', 'shuffleChoices', 'maxAttempts',
+            'shuffleQuestions', 'maxAttempts',
             'updated_at',
         ]
         read_only_fields = ['updated_at']

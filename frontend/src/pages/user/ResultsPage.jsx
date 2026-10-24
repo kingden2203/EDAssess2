@@ -39,6 +39,14 @@ export default function ResultsPage() {
   const { attemptId } = useParams();
   const { history } = useExamHistory(); // ← para sa GWA (dapat nasa taas, bago ang early returns)
 
+  // "Show Answer Explanations" setting (admin > Exam Config). Naka-off = walang explanation text.
+  const [allowExplanations, setAllowExplanations] = useState(false);
+  useEffect(() => {
+    examApi.getExamConfig()
+      .then((c) => setAllowExplanations(!!c?.allowReview))
+      .catch(() => {});
+  }, []);
+
   const [fetchedState, setFetchedState] = useState(null);
   const [fetching, setFetching] = useState(!state && !!attemptId);
   const [notFound, setNotFound] = useState(false);
@@ -415,7 +423,7 @@ export default function ResultsPage() {
                         {q.choices.map((choiceText, ci) => {
                           const isTheCorrect = ci === q.answer;
                           const isThePicked  = ci === userAnswer;
-                          const exp = (choiceExps[ci] || '').trim();
+                          const exp = allowExplanations ? (choiceExps[ci] || '').trim() : '';
 
                           const borderColor = isTheCorrect
                             ? 'var(--user-accent)'
@@ -451,7 +459,7 @@ export default function ResultsPage() {
                               </div>
                               {exp ? (
                                 <p style={{ fontSize: 12.5, color: 'var(--user-text-sub)', margin: 0, lineHeight: 1.6 }}>{exp}</p>
-                              ) : isTheCorrect && q.explanation ? (
+                              ) : isTheCorrect && allowExplanations && q.explanation ? (
                                 // Fallback sa lumang single explanation para sa mga attempt
                                 // na na-save bago nagkaroon ng per-choice explanations.
                                 <p style={{ fontSize: 12.5, color: 'var(--user-text-sub)', margin: 0, lineHeight: 1.6 }}>{q.explanation}</p>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, UserPlus, Edit2, Trash2, X, Eye, EyeOff, RefreshCw, Loader2 } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
 import useAuthStore from '../../auth/useAuthStore';
+import { majorsFor } from '../../utils/majors';
 
 const DEPARTMENTS = [
   { value: 'CIT', label: 'CIT', full: 'College of Industrial Technology' },
@@ -19,7 +20,7 @@ const STATUS_BADGE = {
   inactive: 'badge badge-warning',
 };
 
-const EMPTY_FORM = { name: '', email: '', role: 'instructor', department: '', password: '' };
+const EMPTY_FORM = { name: '', email: '', role: 'instructor', department: '', major: '', password: '' };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function generatePassword() {
@@ -31,7 +32,7 @@ function generatePassword() {
 
 export default function UserPage() {
   const { user: me } = useAuthStore();
-  const isSuper = me?.role === 'admin' && !me?.department; // super admin = admin na walang department
+  const isSuper = me?.role === 'admin' && !me?.department;
   const creatableRoles = isSuper ? ['instructor', 'admin'] : ['instructor'];
 
   const [search, setSearch] = useState('');
@@ -45,6 +46,10 @@ export default function UserPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Department na gagamitin ng form (super admin = pinili; dept admin = sarili niya)
+  const formDept = isSuper ? form.department : me?.department;
+  const formMajors = majorsFor(formDept);
 
   const deptBtnStyle = (active) => ({
     flex: 1, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13,
@@ -125,7 +130,10 @@ export default function UserPage() {
       return;
     }
     setEditId(u.id);
-    setForm({ name: u.name, email: u.email, role: u.role, department: u.department || '', password: '' });
+    setForm({
+      name: u.name, email: u.email, role: u.role,
+      department: u.department || '', major: u.major || '', password: '',
+    });
     setFormError('');
     setShowPassword(false);
     setShowModal(true);
@@ -144,6 +152,7 @@ export default function UserPage() {
     if (!EMAIL_RE.test(form.email.trim())) return setFormError('Enter a valid email address.');
     if (!creatableRoles.includes(form.role)) return setFormError(isSuper ? 'Role must be Instructor or Admin.' : 'Role must be Instructor.');
     if (isSuper && form.role === 'instructor' && !form.department) return setFormError('Select a department (CIT or CTE) for this instructor.');
+    if (form.role === 'instructor' && !form.major) return setFormError("Select the instructor's major.");
     if (!editId && form.password.trim().length < 8) return setFormError('Password must be at least 8 characters.');
 
     const emailTaken = users.some((u) => u.email.toLowerCase() === form.email.trim().toLowerCase() && u.id !== editId);
@@ -164,8 +173,8 @@ export default function UserPage() {
       email: form.email.trim(),
       username: form.email.trim(),
       role: form.role,
-      // Super admin: pinili ang department (blank sa admin = super admin). Department admin: sariling department lang.
       department: isSuper ? (form.department || null) : me.department,
+      major: form.role === 'instructor' ? form.major : null,
       ...(form.password && { password: form.password }),
     };
 
@@ -307,6 +316,7 @@ export default function UserPage() {
                       {u.role === 'admin' && !u.department
                         ? <span className="badge badge-purple" style={{ marginLeft: 6 }}>Super</span>
                         : u.department && <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{u.department}</span>}
+                      {u.major && <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{u.major}</span>}
                     </td>
                     <td>
                       <button
@@ -417,7 +427,7 @@ export default function UserPage() {
                 <label style={labelStyle}>Role</label>
                 <select
                   value={form.role}
-                  onChange={(e) => setForm((p) => ({ ...p, role: e.target.value, department: '' }))}
+                  onChange={(e) => setForm((p) => ({ ...p, role: e.target.value, department: '', major: '' }))}
                   style={inputStyle}
                 >
                   <option value="instructor">Instructor</option>
@@ -438,7 +448,7 @@ export default function UserPage() {
                       <button
                         type="button"
                         style={deptBtnStyle(form.department === '')}
-                        onClick={() => setForm((p) => ({ ...p, department: '' }))}
+                        onClick={() => setForm((p) => ({ ...p, department: '', major: '' }))}
                       >
                         All (Super)
                       </button>
@@ -449,7 +459,9 @@ export default function UserPage() {
                         type="button"
                         title={d.full}
                         style={deptBtnStyle(form.department === d.value)}
-                        onClick={() => setForm((p) => ({ ...p, department: d.value }))}
+                        onClick={() => setForm((p) => ({
+                          ...p, department: d.value, major: p.department === d.value ? p.major : '',
+                        }))}
                       >
                         {d.label}
                       </button>
@@ -462,6 +474,26 @@ export default function UserPage() {
                 <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--admin-text-muted)' }}>
                   Mapupunta sa department mo ang account: <strong>{me?.department}</strong>
                 </p>
+              )}
+
+              {form.role === 'instructor' && formDept && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>
+                    Major <span style={{ fontWeight: 400, color: 'var(--admin-text-muted)' }}>· instructor can only manage this major&apos;s questions and exams</span>
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {formMajors.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        style={{ ...deptBtnStyle(form.major === m), flex: '1 1 calc(50% - 8px)' }}
+                        onClick={() => setForm((p) => ({ ...p, major: m }))}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {!editId && (

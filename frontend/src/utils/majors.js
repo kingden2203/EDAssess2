@@ -15,6 +15,7 @@ export const MAJORS_BY_DEPARTMENT = {
     'Computer Programming',
     'Construction/Civil Technology',
     'Electrical Technology',
+    'Electronics Technology',
     'Food Services Management',
     'Mechanical Technology',
     'Industrial Arts',

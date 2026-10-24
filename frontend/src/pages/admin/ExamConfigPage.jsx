@@ -10,7 +10,6 @@ const DEFAULT_CONFIG = {
   showResults: true,
   allowReview: false,
   shuffleQuestions: true,
-  shuffleChoices: false,
   maxAttempts: 1,
 };
 
@@ -171,11 +170,12 @@ export default function ExamConfigPage() {
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">
                     Max Attempts per Student
+                    <span className="form-label-sub">· 0 = unlimited</span>
                   </label>
                   <div className="form-input-with-unit">
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       max={10}
                       value={config.maxAttempts}
                       onChange={(e) => handleChange('maxAttempts', Number(e.target.value))}
@@ -228,8 +228,8 @@ export default function ExamConfigPage() {
 
                 <div className="toggle-row">
                   <div className="toggle-info">
-                    <h4>Allow Answer Review</h4>
-                    <p>Students can review their answers before submitting</p>
+                    <h4>Show Answer Explanations</h4>
+                    <p>Students can view the answer explanations</p>
                   </div>
                   <label className="toggle-switch">
                     <input
@@ -256,20 +256,6 @@ export default function ExamConfigPage() {
                   </label>
                 </div>
 
-                <div className="toggle-row">
-                  <div className="toggle-info">
-                    <h4>Shuffle Answer Choices</h4>
-                    <p>Randomize the order of options per question</p>
-                  </div>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={config.shuffleChoices}
-                      onChange={(e) => handleChange('shuffleChoices', e.target.checked)}
-                    />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
               </div>
             </div>
 
@@ -284,7 +270,7 @@ export default function ExamConfigPage() {
                   { label: 'Major Duration', value: `${config.major} min` },
                   { label: 'Auto-Submit', value: config.autoSubmit ? 'Enabled' : 'Disabled' },
                   { label: 'Passing Rule', value: '75% avg · 50% per area (PRC)' },
-                  { label: 'Max Attempts', value: config.maxAttempts },
+                  { label: 'Max Attempts', value: config.maxAttempts === 0 ? 'Unlimited' : config.maxAttempts },
                 ].map(({ label, value }) => (
                   <div key={label} style={{
                     display: 'flex', justifyContent: 'space-between',

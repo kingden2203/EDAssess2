@@ -124,6 +124,40 @@ STORAGES = {
     'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
 }
 
+# ── External storage para sa Review Modules (Supabase Storage via S3 protocol) ──
+# Kapag walang S3_BUCKET_NAME (local), FileSystemStorage ang gamit.
+S3_BUCKET_NAME = config('S3_BUCKET_NAME', default='')
+if S3_BUCKET_NAME:
+    STORAGES['default'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': S3_BUCKET_NAME,
+            'endpoint_url': config('S3_ENDPOINT_URL'),       # .../storage/v1/s3 (buo, walang bucket name)
+            'access_key': config('S3_ACCESS_KEY_ID'),
+            'secret_key': config('S3_SECRET_ACCESS_KEY'),
+            'region_name': config('S3_REGION', default='us-east-1'),
+            'signature_version': 's3v4',
+            'addressing_style': 'path',
+            'default_acl': None,
+            'file_overwrite': False,
+            'querystring_auth': True,       # private bucket, signed links
+            'querystring_expire': 300,
+        },
+    }
+
+# ── Email (verification codes) ──────────────────────────────────────────────
+# Render free tier blocks SMTP, kaya Brevo HTTPS API ang gamit sa production.
+BREVO_API_KEY = config('BREVO_API_KEY', default='')
+BREVO_SENDER_EMAIL = config('BREVO_SENDER_EMAIL', default='')
+# SMTP (local / paid hosting). Walang config = naka-print sa console.
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='EduAssess <no-reply@eduassess.local>')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {

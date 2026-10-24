@@ -1,4 +1,6 @@
 # backend/accounts/views.py
+import logging
+
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils.dateparse import parse_date
@@ -8,6 +10,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from .activity import log_activity
+from .emailing import check_code, send_verification_code, seconds_until_resend
 from .models import (
     ActivityLog, DEPT_CONTROLLABLE, DepartmentPermission, RolePermission,
     SystemSettings, default_role_permissions, majors_for,
@@ -19,6 +22,7 @@ from .permissions import (
 from .serializers import RolePermissionSerializer, SystemSettingsSerializer
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def serialize_user(user):
@@ -37,13 +41,13 @@ def serialize_user(user):
 
 
 def describe_account(u):
-    """Readable label para sa activity log: 'Ana <ana@x.com> (CIT Instructor)'."""
+    """Readable label para sa activity log: 'Ana <ana@x.com> (CIT Instructor, Mathematics)'."""
     if u.is_super_admin:
         kind = 'Super Admin'
     elif u.role == User.ROLE_ADMIN:
         kind = f'{u.department} Admin'
     elif u.role == User.ROLE_INSTRUCTOR:
-        kind = f'{u.department or "no dept"} Instructor'
+        kind = f'{u.department or "no dept"} Instructor' + (f', {u.major}' if u.major else '')
     else:
         kind = f'{u.department or "no dept"} Student' + (f', {u.major}' if u.major else '')
     return f'{u.name} <{u.email}> ({kind})'
@@ -55,6 +59,18 @@ def other_super_admin_exists(exclude_pk):
         .filter(Q(department__isnull=True) | Q(department=''))
         .exclude(pk=exclude_pk)
         .exists()
+    )
+
+
+def token_response(user, status_code=status.HTTP_200_OK):
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user': serialize_user(user),
+        },
+        status=status_code,
     )
 
 
@@ -111,21 +127,70 @@ class RegisterView(APIView):
             email=email, name=name, password=password, role=User.ROLE_STUDENT,
             department=department, major=major,
         )
+        user.email_verified = False
+        user.save(update_fields=['email_verified'])
 
         log_activity(
-            request, 'auth.register', f'New student registered: {describe_account(user)}',
+            request, 'auth.register', f'New student registered (unverified): {describe_account(user)}',
             category='auth', department=user.department, actor=user,
         )
 
-        refresh = RefreshToken.for_user(user)
+        email_sent = True
+        try:
+            send_verification_code(user)
+        except Exception:
+            logger.exception('Failed to send verification email to %s', email)
+            email_sent = False
 
         return Response(
-            {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-                'user': serialize_user(user),
-            },
+            {'verification_required': True, 'email': email, 'email_sent': email_sent},
             status=status.HTTP_201_CREATED,
+        )
+
+
+class VerifyEmailView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = str(request.data.get('email') or '').strip().lower()
+        code = str(request.data.get('code') or '').strip()
+
+        user = User.objects.filter(email=email).first()
+        if not user or user.email_verified or not check_code(user, code):
+            return Response(
+                {'message': 'Invalid or expired code.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.email_verified = True
+        user.save(update_fields=['email_verified'])
+
+        log_activity(
+            request, 'auth.verify_email', f'Email verified: {describe_account(user)}',
+            category='auth', department=user.department, actor=user,
+        )
+        return token_response(user)
+
+
+class ResendCodeView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = str(request.data.get('email') or '').strip().lower()
+        user = User.objects.filter(email=email).first()
+
+        if user and not user.email_verified and seconds_until_resend(user) == 0:
+            try:
+                send_verification_code(user)
+            except Exception:
+                logger.exception('Failed to resend verification email to %s', email)
+
+        # Pareho laging sagot para hindi mahulaan kung registered ang email
+        return Response(
+            {'message': 'If the account exists and is unverified, a new code was sent.'},
+            status=status.HTTP_200_OK,
         )
 
 
@@ -161,6 +226,16 @@ class LoginView(APIView):
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
+                if not user.email_verified:
+                    return Response(
+                        {
+                            'message': 'Please verify your email first.',
+                            'code': 'email_unverified',
+                            'email': email,
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
                 # Maintenance mode: admin lang ang puwedeng pumasok
                 if SystemSettings.load().maintenanceMode and user.role != User.ROLE_ADMIN:
                     log_activity(
@@ -173,21 +248,11 @@ class LoginView(APIView):
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
-                refresh = RefreshToken.for_user(user)
-
                 log_activity(
                     request, 'auth.login', f'Signed in: {describe_account(user)}',
                     category='auth', department=user.department, actor=user,
                 )
-
-                return Response(
-                    {
-                        'refresh': str(refresh),
-                        'access': str(refresh.access_token),
-                        'user': serialize_user(user),
-                    },
-                    status=status.HTTP_200_OK,
-                )
+                return token_response(user)
 
             log_activity(
                 request, 'auth.login_failed', f'Failed login attempt for {email}',
@@ -259,7 +324,7 @@ class MeView(APIView):
             user.set_password(new_password)
             changed.append('password')
 
-        # Student lang ang may major; dapat tugma sa department niya
+        # Student lang ang puwedeng magpalit ng major dito; dapat tugma sa department niya
         new_major = request.data.get('major')
         if new_major is not None and user.role == User.ROLE_STUDENT:
             new_major = str(new_major).strip()
@@ -297,8 +362,19 @@ class MyPermissionsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        # Super admin = full access. Iba: global matrix + department override.
         return Response(effective_permissions(request.user), status=status.HTTP_200_OK)
+
+
+class SessionConfigView(APIView):
+    """Para sa idle auto-logout. Kahit anong naka-login ay puwedeng bumasa."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(
+            {'sessionTimeout': SystemSettings.load().sessionTimeout},
+            status=status.HTTP_200_OK,
+        )
 
 
 # ── User management ─────────────────────────────────────────────────────────
@@ -324,6 +400,7 @@ class AdminCreateUserView(APIView):
         role = request.data.get('role', User.ROLE_INSTRUCTOR)
         password = request.data.get('password', '')
         department = request.data.get('department') or None
+        major = str(request.data.get('major') or '').strip()
 
         if scope:
             # Department admin: instructor lang, at sa sariling department lang
@@ -352,12 +429,23 @@ class AdminCreateUserView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Instructor: kailangan ng major na tugma sa department. Iba: walang major.
+        if role == User.ROLE_INSTRUCTOR:
+            if major not in majors_for(department):
+                return Response(
+                    {'message': f"Select the instructor's {department} major."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            major = None
+
         if User.objects.filter(email=email).exists():
             return Response({'message': 'Email is already registered.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Admin na walang department = super admin
         user = User.objects.create_user(
-            email=email, name=name, password=password, role=role, department=department,
+            email=email, name=name, password=password, role=role,
+            department=department, major=major,
         )
         user.is_staff = role in (User.ROLE_ADMIN, User.ROLE_INSTRUCTOR)
         user.is_superuser = role == User.ROLE_ADMIN and not department
@@ -428,8 +516,6 @@ class DepartmentPermissionView(APIView):
     Per-department access control.
       - Department admin: sariling department lang (automatic).
       - Super admin: kahit alin, via ?department=CIT|CTE.
-    Ang super admin ang may "ceiling" (global matrix). Dito, puwede lang i-off ng admin
-    ang mga feature ng instructors/students ng department niya.
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdmin, CanManageAccess]
@@ -580,6 +666,19 @@ class AdminUserDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Major: instructor = required; student = hindi ginagalaw dito; admin = wala
+        if role == User.ROLE_INSTRUCTOR:
+            major = str(request.data.get('major', user.major) or '').strip()
+            if major not in majors_for(department):
+                return Response(
+                    {'message': "Select the instructor's major."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif role == User.ROLE_STUDENT:
+            major = user.major
+        else:
+            major = None
+
         if User.objects.filter(email=email).exclude(pk=user.pk).exists():
             return Response(
                 {'message': 'Email is already registered to another account.'},
@@ -603,6 +702,8 @@ class AdminUserDetailView(APIView):
             changes.append(f'role {user.role} → {role}')
         if (department or None) != (user.department or None):
             changes.append(f'department {user.department or "none"} → {department or "none"}')
+        if (major or None) != (user.major or None):
+            changes.append(f'major {user.major or "none"} → {major or "none"}')
         if password:
             changes.append('password reset')
 
@@ -610,6 +711,7 @@ class AdminUserDetailView(APIView):
         user.email = email
         user.role = role
         user.department = department
+        user.major = major or None
         user.is_staff = role in (User.ROLE_ADMIN, User.ROLE_INSTRUCTOR)
         user.is_superuser = role == User.ROLE_ADMIN and not department
 

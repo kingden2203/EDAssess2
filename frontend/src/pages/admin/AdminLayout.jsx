@@ -18,7 +18,7 @@ const NAV_ITEMS = [
   { to: '/admin',          label: 'Dashboard',      icon: LayoutDashboard, end: true, permKey: 'viewDashboard' },
   { to: '/admin/users',    label: 'Users',          icon: Users,           permKey: 'manageUsers' },
   { to: '/admin/modules',  label: 'Review Modules', icon: FolderOpen,      permKey: 'viewReviewModules' },
-  { to: '/admin/reports',  label: 'Reports',        icon: BarChart2,       permKey: 'viewReports' },
+  { to: '/admin/reports',  label: 'Student Monitor',        icon: BarChart2,       permKey: 'viewReports' },
   { to: '/admin/exams',    label: 'Exam Config',    icon: FileText,        permKey: 'configureExams', superOnly: true },
   { to: '/admin/access',   label: 'Access Control', icon: ShieldCheck,     permKey: 'manageAccess' },
   { to: '/admin/activity', label: 'Activity Log',   icon: History,         permKey: null,             superOnly: true },

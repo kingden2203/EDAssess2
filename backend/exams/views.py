@@ -1,6 +1,7 @@
 # backend/exams/views.py
 from django.db.models import Avg
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from accounts.activity import log_activity
@@ -8,7 +9,7 @@ from accounts.permissions import (
     IsSuperAdmin, IsInstructor, CanConfigureExams, CanTakeExams,
     apply_dept_scope, apply_major_scope,
 )
-from .models import Exam, ExamAttempt, ExamConfig, Question
+from .models import Exam, ExamAttempt, ExamConfig, Question, count_attempts
 from .serializers import (
     ExamAttemptSerializer, ExamConfigSerializer, ExamSerializer, QuestionSerializer,
 )
@@ -51,6 +52,13 @@ class ExamAttemptListCreateView(generics.ListCreateAPIView):
         return ExamAttempt.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
+        exam = serializer.validated_data.get('exam')
+        limit = ExamConfig.load().maxAttempts  # 0 = unlimited
+        if exam is not None and limit > 0:
+            if count_attempts(self.request.user, exam) >= limit:
+                raise PermissionDenied(
+                    f'You have reached the maximum of {limit} attempt(s) for this exam.'
+                )
         serializer.save(user=self.request.user)
 
 

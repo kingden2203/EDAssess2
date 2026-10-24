@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { FolderOpen, Plus, Upload, Trash2, Download, X, FileText } from 'lucide-react';
 import useReviewModules, { formatFileSize } from '../../hooks/useReviewModules';
 import useAuthStore from '../../auth/useAuthStore';
+import { majorsFor } from '../../utils/majors';
 
 const CATEGORIES = ['All', 'GenEd', 'ProfEd', 'Major'];
 const VALID_CATEGORIES = ['GenEd', 'ProfEd', 'Major'];
@@ -14,7 +15,7 @@ const CATEGORY_BADGE = {
   Major:  'badge badge-warning',
 };
 
-const EMPTY_FORM = { title: '', description: '', category: 'GenEd', file: null };
+const EMPTY_FORM = { title: '', description: '', category: 'GenEd', major: '', file: null };
 
 export default function ModulesPage() {
   const { user } = useAuthStore();
@@ -25,6 +26,11 @@ export default function ModulesPage() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
   const fileRef = useRef();
+
+  // Instructor: naka-lock sa sariling major. Department admin: puwedeng pumili ng major (optional).
+  const lockedMajor = user?.role === 'instructor' ? user?.major : null;
+  const isDeptAdmin = user?.role === 'admin' && !!user?.department;
+  const deptMajors = isDeptAdmin ? majorsFor(user.department) : [];
 
   const filtered = filter === 'All' ? modules : modules.filter((m) => m.category === filter);
 
@@ -48,13 +54,21 @@ export default function ModulesPage() {
         title: form.title.trim(),
         description: form.description.trim(),
         category: form.category,
+        // Instructor: ang backend mismo ang naglalagay ng major niya. Dept admin: optional na pili.
+        major: form.category === 'Major' && isDeptAdmin ? form.major : '',
         file: form.file,
         uploadedBy: user?.name || 'Admin',
       });
       closeModal();
     } catch (err) {
       console.error(err);
-      alert('Failed to save the module. The file may be too large for this browser to store.');
+      const data = err.response?.data;
+      alert(
+        (typeof data?.detail === 'string' && data.detail) ||
+        (typeof data?.message === 'string' && data.message) ||
+        (data?.major && String(data.major)) ||
+        'Failed to upload the module. Please try again.'
+      );
     }
     setSaving(false);
   };
@@ -62,6 +76,19 @@ export default function ModulesPage() {
   const handleDelete = (id) => {
     if (confirm('Delete this review module? Students will no longer be able to download it.')) removeModule(id);
   };
+
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
+    borderRadius: 8, border: '1px solid var(--admin-border)',
+    fontSize: 13.5, color: 'var(--admin-text)', background: 'var(--admin-bg-card, #fff)',
+  };
+  const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-sub)', marginBottom: 6 };
+  const pickBtn = (active) => ({
+    padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12.5,
+    border: `1px solid ${active ? 'var(--admin-accent, #0f172a)' : 'var(--admin-border, #cbd5e1)'}`,
+    background: active ? 'var(--admin-accent-soft, #e2e8f0)' : 'var(--admin-bg-card, #fff)',
+    color: 'var(--admin-text)', fontWeight: active ? 700 : 500,
+  });
 
   return (
     <>
@@ -111,7 +138,11 @@ export default function ModulesPage() {
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{m.title}</div>
                       {m.description && <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', marginTop: 2 }}>{m.description}</div>}
                     </td>
-                    <td><span className={CATEGORY_BADGE[m.category]}>{m.category}</span></td>
+                    <td>
+                      <span className={CATEGORY_BADGE[m.category]}>
+                        {m.category === 'Major' && m.major ? `Major (${m.major})` : m.category}
+                      </span>
+                    </td>
                     <td style={{ fontSize: 12.5, color: 'var(--admin-text-sub)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <FileText size={13} /> {m.fileName}
@@ -139,10 +170,7 @@ export default function ModulesPage() {
         </div>
       </div>
 
-      {/* Upload Modal — fully self-contained inline styles. No modal CSS exists
-          anywhere in admin.css (ExamConfigPage/AccessControlPage use inline
-          forms, not modals), so this doesn't depend on any external class
-          to render as a proper centered overlay. */}
+      {/* Upload Modal — fully self-contained inline styles. */}
       {showModal && (
         <div
           onClick={closeModal}
@@ -196,33 +224,21 @@ export default function ModulesPage() {
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-sub)', marginBottom: 6 }}>
-                  Module Title
-                </label>
+                <label style={labelStyle}>Module Title</label>
                 <input
                   placeholder="e.g. GenEd Reviewer — Mathematics"
                   value={form.title}
                   onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                  style={{
-                    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
-                    borderRadius: 8, border: '1px solid var(--admin-border)',
-                    fontSize: 13.5, color: 'var(--admin-text)', background: 'var(--admin-bg-card, #fff)',
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-sub)', marginBottom: 6 }}>
-                  Category
-                </label>
+                <label style={labelStyle}>Category</label>
                 <select
                   value={form.category}
-                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-                  style={{
-                    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
-                    borderRadius: 8, border: '1px solid var(--admin-border)',
-                    fontSize: 13.5, color: 'var(--admin-text)', background: 'var(--admin-bg-card, #fff)',
-                  }}
+                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value, major: '' }))}
+                  style={inputStyle}
                 >
                   <option value="GenEd">GenEd</option>
                   <option value="ProfEd">ProfEd</option>
@@ -230,8 +246,32 @@ export default function ModulesPage() {
                 </select>
               </div>
 
+              {form.category === 'Major' && lockedMajor && (
+                <p style={{ margin: '-6px 0 16px', fontSize: 12, color: 'var(--admin-text-muted)' }}>
+                  This module will be tagged to your major: <strong>{lockedMajor}</strong>
+                </p>
+              )}
+
+              {form.category === 'Major' && isDeptAdmin && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>
+                    Major <span style={{ fontWeight: 400, color: 'var(--admin-text-muted)' }}>· optional, blank = whole {user.department}</span>
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <button type="button" style={pickBtn(form.major === '')} onClick={() => setForm((p) => ({ ...p, major: '' }))}>
+                      Whole department
+                    </button>
+                    {deptMajors.map((m) => (
+                      <button key={m} type="button" style={pickBtn(form.major === m)} onClick={() => setForm((p) => ({ ...p, major: m }))}>
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-sub)', marginBottom: 6 }}>
+                <label style={labelStyle}>
                   Description <span style={{ fontWeight: 400, color: 'var(--admin-text-muted)' }}>· Optional</span>
                 </label>
                 <textarea
@@ -239,12 +279,7 @@ export default function ModulesPage() {
                   value={form.description}
                   onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                   rows={3}
-                  style={{
-                    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
-                    borderRadius: 8, border: '1px solid var(--admin-border)',
-                    fontSize: 13.5, color: 'var(--admin-text)', background: 'var(--admin-bg-card, #fff)',
-                    resize: 'vertical', fontFamily: 'inherit',
-                  }}
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 />
               </div>
 

@@ -5,7 +5,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import useQuestionBank from '../../hooks/useQuestionBank';
 import useAuthStore from '../../auth/useAuthStore';
-import MajorPicker from '../../components/MajorPicker';
+import MajorField from '../../components/MajorField';
 import apiError from '../../utils/apiError';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -199,7 +199,7 @@ const EMPTY_FORM = {
 };
 
 export default function QuestionBankPage() {
-  const { questions, loading, addQuestion, addQuestions, updateQuestion, removeQuestion } = useQuestionBank();
+  const { questions, loading, addQuestion, addQuestions, updateQuestion, removeQuestion, removeQuestions } = useQuestionBank();
   const { user } = useAuthStore();
 
   const [search, setSearch]       = useState('');
@@ -221,6 +221,7 @@ export default function QuestionBankPage() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
 
   // The backend only returns the instructor's own questions.
   const filtered = questions.filter((q) => {
@@ -303,39 +304,50 @@ export default function QuestionBankPage() {
     }
   };
 
-  // Deletes every question in the currently selected category.
-  const handleDeleteAllInCategory = async () => {
-    if (filter === 'All' || categoryQuestions.length === 0) return;
+  // ---------- Multi-select + bulk delete ----------
+  const selectedIds = questions.filter((q) => selected.has(q.id)).map((q) => q.id);
+  const shownIds = filtered.map((q) => q.id);
+  const allShown = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
 
+  const toggleOne = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const toggleAllShown = () => setSelected((prev) => {
+    const next = new Set(prev);
+    shownIds.forEach((id) => (allShown ? next.delete(id) : next.add(id)));
+    return next;
+  });
+
+  const runBulkDelete = async (ids, message) => {
+    if (!ids.length || !confirm(message)) return;
+    setDeletingAll(true);
+    try {
+      await removeQuestions(ids);
+      setSelected(new Set());
+    } catch (err) {
+      alert(apiError(err, 'Failed to delete questions.'));
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const handleDeleteSelected = () => runBulkDelete(
+    selectedIds,
+    `Delete ${selectedIds.length} selected question(s)?\n\n` +
+    `They will also be removed from any exam that includes them. This cannot be undone.`
+  );
+
+  const handleDeleteAllInCategory = () => {
+    if (filter === 'All' || categoryQuestions.length === 0) return;
     const count = categoryQuestions.length;
-    const ok = confirm(
+    return runBulkDelete(
+      categoryQuestions.map((q) => q.id),
       `Delete ALL ${count} ${filter} question${count === 1 ? '' : 's'}?\n\n` +
       `They will also be removed from any exam that includes them. This cannot be undone.`
     );
-    if (!ok) return;
-
-    setDeletingAll(true);
-    let failed = 0;
-    let lastError = null;
-
-    // Sequential on purpose so the hook's local state updates stay consistent.
-    for (const q of categoryQuestions) {
-      try {
-        await removeQuestion(q.id);
-      } catch (err) {
-        failed += 1;
-        lastError = err;
-      }
-    }
-
-    setDeletingAll(false);
-
-    if (failed > 0) {
-      alert(
-        `Deleted ${count - failed} of ${count} ${filter} questions. ${failed} failed.\n` +
-        apiError(lastError, 'Some questions could not be deleted.')
-      );
-    }
   };
 
   // ---------- PDF import flow ----------
@@ -428,6 +440,21 @@ export default function QuestionBankPage() {
               {CATEGORIES.map((cat) => (
                 <button key={cat} className={`inst-btn inst-btn-sm ${filter === cat ? 'inst-btn-primary' : 'inst-btn-secondary'}`} onClick={() => setFilter(cat)}>{cat}</button>
               ))}
+              {selectedIds.length > 0 && (
+                <>
+                  <button
+                    className="inst-btn inst-btn-secondary inst-btn-sm"
+                    onClick={handleDeleteSelected}
+                    disabled={deletingAll}
+                    style={{ color: 'var(--inst-danger)', borderColor: 'var(--inst-danger)' }}
+                  >
+                    <Trash2 size={13} /> {deletingAll ? 'Deleting...' : `Delete selected (${selectedIds.length})`}
+                  </button>
+                  <button className="inst-btn inst-btn-secondary inst-btn-sm" onClick={() => setSelected(new Set())}>
+                    Clear
+                  </button>
+                </>
+              )}
               {filter !== 'All' && categoryQuestions.length > 0 && (
                 <button
                   className="inst-btn inst-btn-secondary inst-btn-sm"
@@ -451,6 +478,9 @@ export default function QuestionBankPage() {
             <table className="inst-table">
               <thead>
                 <tr>
+                  <th style={{ width: 36 }}>
+                    <input type="checkbox" checked={allShown} onChange={toggleAllShown} title="Select all shown" />
+                  </th>
                   <th style={{ width: 44 }}>#</th>
                   <th style={{ width: '40%' }}>Question</th>
                   <th>Category</th>
@@ -463,6 +493,9 @@ export default function QuestionBankPage() {
               <tbody>
                 {filtered.map((q, idx) => (
                   <tr key={q.id}>
+                    <td>
+                      <input type="checkbox" checked={selected.has(q.id)} onChange={() => toggleOne(q.id)} />
+                    </td>
                     <td style={{ fontSize: 12.5, color: 'var(--inst-text-muted)', fontWeight: 600 }}>{idx + 1}</td>
                     <td style={{ fontWeight: 500, fontSize: 13 }}>{q.question}</td>
                     <td>
@@ -532,7 +565,7 @@ export default function QuestionBankPage() {
               </div>
 
               {form.category === 'Major' && (
-                <MajorPicker
+                <MajorField
                   department={user?.department}
                   label="Major"
                   value={form.major}
@@ -651,7 +684,7 @@ export default function QuestionBankPage() {
 
                   {pdfParsed.valid.length > 0 && pdfCategory === 'Major' && (
                     <div style={{ marginBottom: 16 }}>
-                      <MajorPicker
+                      <MajorField
                         department={user?.department}
                         label="Major"
                         value={pdfMajor}

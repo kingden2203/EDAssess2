@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Clock, FileText, Zap, ChevronRight, BarChart2, GraduationCap } from 'lucide-react';
+import { BookOpen, Clock, FileText, Zap, ChevronRight, BarChart2, GraduationCap, ClipboardCheck } from 'lucide-react';
 import { examApi } from '../../api/examApi';
 import authApi from '../../api/authApi';
 import useAuthStore from '../../auth/useAuthStore';
@@ -119,6 +119,12 @@ export default function ExamSelectionPage() {
 
     if (!matchingExam) {
       alert(`No active ${exam.label} exam has been published yet. Please check with your instructor.`);
+      return;
+    }
+
+    const attemptLimit = examConfig?.maxAttempts ?? 1;
+    if (attemptLimit > 0 && (matchingExam.attempts_used ?? 0) >= attemptLimit) {
+      alert(`You have already used your ${attemptLimit} attempt(s) for this exam.`);
       return;
     }
 
@@ -259,6 +265,9 @@ export default function ExamSelectionPage() {
             const needsMajor = category === 'Major' && !user?.major;
             const matchingExam = needsMajor ? null : findMatchingExam(category);
             const latest = (history || []).find((h) => h.short === exam.short);
+            const limit = examConfig?.maxAttempts ?? 1;
+            const used = matchingExam?.attempts_used ?? 0;
+            const locked = !!matchingExam && limit > 0 && used >= limit;
             return (
               <div className="exam-sel-card" key={exam.id}>
                 <div className="exam-sel-card-top">
@@ -297,6 +306,12 @@ export default function ExamSelectionPage() {
                       </strong>
                     </span>
                   </div>
+                  <div className="exam-sel-meta-row">
+                    <ClipboardCheck size={14} />
+                    <span>
+                      Attempts: <strong>{matchingExam ? `${used} / ${limit === 0 ? '∞' : limit}` : '—'}</strong>
+                    </span>
+                  </div>
                 </div>
 
                 {/* Topics */}
@@ -316,13 +331,15 @@ export default function ExamSelectionPage() {
                 <button
                   className={`exam-sel-btn ${exam.color}`}
                   onClick={() => handleStart(exam)}
-                  disabled={!matchingExam}
-                  style={!matchingExam ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                  disabled={!matchingExam || locked}
+                  style={(!matchingExam || locked) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                 >
                   {fetching
                     ? 'Loading...'
                     : needsMajor
                       ? 'Select Your Major First'
+                      : locked
+                        ? 'Attempt Limit Reached'
                       : matchingExam
                         ? `Start ${exam.short} Exam`
                         : 'Not Available Yet'}{' '}

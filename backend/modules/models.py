@@ -20,7 +20,9 @@ class Module(models.Model):
     # Optional. Major modules na may major tag = para lang sa students ng major na iyon.
     # Walang tag = bukas sa buong department (gaya ng dati).
     major = models.CharField(max_length=40, choices=MAJOR_CHOICES, blank=True, null=True)
-    file = models.FileField(upload_to='review_modules/')
+    file = models.FileField(upload_to='review_modules/', max_length=255)
+    # Naka-save ang laki para hindi na tatawag sa storage (S3) sa bawat listing.
+    size = models.PositiveBigIntegerField(default=0)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -41,9 +43,11 @@ class Module(models.Model):
 
     @property
     def file_size(self):
+        if self.size:
+            return self.size
         try:
             return self.file.size
-        except (ValueError, OSError):
+        except Exception:  # nawawalang file (hal. lumang uploads sa Render disk) = 0, hindi 500
             return 0
 
 

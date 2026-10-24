@@ -1,6 +1,11 @@
 # backend/modules/views.py
+from urllib.parse import quote
+
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, parsers, serializers
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from accounts.activity import log_activity
 from accounts.models import User, department_of_major
 from accounts.permissions import (
@@ -49,6 +54,8 @@ class ModuleListCreateView(generics.ListCreateAPIView):
 
         department = None
         if category == 'Major':
+            if user.role == User.ROLE_INSTRUCTOR and user.major:
+                major = user.major  # naka-lock sa major ng instructor
             if major:
                 # Hinuhulaan ang department mula sa major; dapat nasa department ng uploader
                 department = department_of_major(major)
@@ -65,7 +72,11 @@ class ModuleListCreateView(generics.ListCreateAPIView):
         else:
             major = None
 
-        module = serializer.save(uploaded_by=user, department=department, major=major)
+        upload = serializer.validated_data.get('file')
+        module = serializer.save(
+            uploaded_by=user, department=department, major=major,
+            size=getattr(upload, 'size', 0) or 0,
+        )
         log_activity(
             self.request, 'module.upload',
             f'Uploaded review module "{module.title}" ({module.category}'
@@ -111,6 +122,44 @@ class ModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
             self.request, 'module.delete', f'Deleted review module "{title}"',
             category='modules', department=dept,
         )
+
+
+class ModuleDownloadView(APIView):
+    """
+    GET /modules/<id>/download  ->  { "url": "<maikling-buhay na link>", "file_name": "..." }
+
+    Dumadaan sa parehong scope/permission ng listing, kaya hindi makukuha ng student ang module
+    na hindi para sa kanya. Ang link ay pirmadong (signed) S3 URL na nagda-download ng file
+    na may tamang pangalan; ang frontend ang magbubukas nito.
+    """
+    permission_classes = [IsAdminOrReadOnly]
+
+    def get(self, request, pk):
+        qs = apply_major_scope(apply_dept_scope(Module.objects.all(), request.user), request.user)
+        module = get_object_or_404(qs, pk=pk)
+
+        gone = {'detail': 'This file is no longer available. Please ask your instructor to upload it again.'}
+        if not module.file:
+            return Response(gone, status=404)
+
+        storage = module.file.storage
+        name = module.file.name
+        try:
+            exists = storage.exists(name)
+        except Exception:
+            exists = True  # hindi ma-verify; subukan pa rin
+        if not exists:
+            return Response(gone, status=404)
+
+        disposition = "attachment; filename*=UTF-8''" + quote(module.file_name or 'module')
+        try:
+            url = storage.url(name, parameters={'ResponseContentDisposition': disposition}, expire=300)
+        except TypeError:
+            url = storage.url(name)  # local FileSystemStorage
+        if url.startswith('/'):
+            url = request.build_absolute_uri(url)
+
+        return Response({'url': url, 'file_name': module.file_name})
 
 
 class AnnouncementListCreateView(generics.ListCreateAPIView):

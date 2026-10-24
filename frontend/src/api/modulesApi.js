@@ -6,11 +6,13 @@ const modulesApi = {
     return response.data;
   },
 
-  createModule: async ({ title, description, category, file }) => {
+  createModule: async ({ title, description, category, file, major, department }) => {
     const formData = new FormData();
     formData.append('title', title);
     formData.append('description', description || '');
     formData.append('category', category);
+    if (major) formData.append('major', major);
+    if (department) formData.append('department', department);
     formData.append('file', file);
 
     const response = await axiosInstance.post('/modules', formData, {
@@ -21,6 +23,12 @@ const modulesApi = {
 
   deleteModule: async (id) => {
     const response = await axiosInstance.delete(`/modules/${id}`);
+    return response.data;
+  },
+
+  // Maikling-buhay na signed link para sa download -> { url, file_name }
+  getDownloadUrl: async (id) => {
+    const response = await axiosInstance.get(`/modules/${id}/download`);
     return response.data;
   },
 };

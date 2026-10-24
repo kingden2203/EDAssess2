@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 
 # ── Majors per department ──────────────────────────────────────────────────
@@ -21,6 +22,7 @@ MAJORS_BY_DEPARTMENT = {
         'Computer Programming',
         'Construction/Civil Technology',
         'Electrical Technology',
+        'Electronics Technology',
         'Food Services Management',
         'Mechanical Technology',
         'Industrial Arts',
@@ -94,6 +96,9 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # Student lang: ang major niya (tugma sa department). Instructor/admin: walang laman.
     major = models.CharField(max_length=40, choices=MAJOR_CHOICES, blank=True, null=True)
+
+    # Existing accounts stay True. Bagong self-registered students ay False hanggang ma-verify.
+    email_verified = models.BooleanField(default=True)
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -272,3 +277,15 @@ class ActivityLog(models.Model):
 
     def __str__(self):
         return f'[{self.created_at:%Y-%m-%d %H:%M}] {self.actor_email or "system"} — {self.action}'
+
+
+class EmailVerification(models.Model):
+    """Isang active 6-digit code per user. Naka-hash ang code."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='email_verification')
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_sent_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f'Verification for {self.user.email}'

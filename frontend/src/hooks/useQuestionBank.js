@@ -1,15 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { questionApi } from '../api/questionApi';
 
-/**
- * Question shape (mula sa backend):
- * {
- *   id, question, category ('GenEd'|'ProfEd'|'Major'), subject, difficulty,
- *   choices: [4 strings], answer: 0-3, explanation, choice_explanations: [4 strings],
- *   department ('CIT'|'CTE'|'BOTH'|null — Major lang)
- * }
- * Ascending ang order (upload order), kaya sa dulo idinaragdag ang bago.
- */
 export default function useQuestionBank() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,5 +42,12 @@ export default function useQuestionBank() {
     setQuestions((prev) => prev.filter((q) => q.id !== id));
   }, []);
 
-  return { questions, loading, addQuestion, addQuestions, updateQuestion, removeQuestion };
+  // Isang request para sa maraming ids (multi-select at "Delete all")
+  const removeQuestions = useCallback(async (ids) => {
+    await questionApi.bulkDeleteQuestions(ids);
+    const gone = new Set(ids);
+    setQuestions((prev) => prev.filter((q) => !gone.has(q.id)));
+  }, []);
+
+  return { questions, loading, addQuestion, addQuestions, updateQuestion, removeQuestion, removeQuestions };
 }
