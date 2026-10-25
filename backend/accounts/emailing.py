@@ -1,6 +1,7 @@
 # backend/accounts/emailing.py
 import json
 import secrets
+import urllib.error
 import urllib.request
 from datetime import timedelta
 
@@ -26,7 +27,7 @@ def seconds_until_resend(user):
 
 def _deliver(to_email, to_name, subject, text):
     """
-    Production (Render free tier blocks SMTP): Brevo HTTPS API  -> BREVO_API_KEY + BREVO_SENDER_EMAIL
+    Production (Render free tier blocks SMTP): Brevo HTTPS API -> BREVO_API_KEY + BREVO_SENDER_EMAIL
     Local / paid hosting: Django SMTP (EMAIL_* settings). Walang config = naka-print sa console.
     """
     api_key = getattr(settings, 'BREVO_API_KEY', '')
@@ -48,9 +49,17 @@ def _deliver(to_email, to_name, subject, text):
             },
             method='POST',
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            resp.read()
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', 'replace')
+            # Lalabas ito sa Render logs: 401 = mali ang key, 400 = hindi verified ang sender, 403 = IP restriction
+            raise RuntimeError(f'Brevo API {e.code}: {body}') from e
         return
+
+    if not settings.DEBUG and settings.EMAIL_BACKEND.endswith('console.EmailBackend'):
+        raise RuntimeError('Email is not configured: set BREVO_API_KEY and BREVO_SENDER_EMAIL on Render.')
 
     send_mail(
         subject=subject,

@@ -9,6 +9,7 @@ import useAuthStore from './auth/useAuthStore';
 import ProtectedRoute from './auth/ProtectedRoute';
 import RoleGuard from './auth/RoleGuard';
 import SuperAdminGuard from './auth/SuperAdminGuard';
+import PermissionGuard from './auth/PermissionGuard';
 
 // ── Landing Page Components ────────────────────────────────────────────────
 import Navbar from './components/Navbar';
@@ -59,6 +60,8 @@ import {
   ExamSelectionPage,
   ReviewModulesPage,
 } from './pages/user/user_index';
+// Direkta ang import para hindi na kailangang galawin ang user_index.js
+import UserAnnouncementsPage from './pages/user/UserAnnouncementsPage';
 
 // ── Scroll to top on route change ──────────────────────────────────────────
 function ScrollToTop() {
@@ -159,14 +162,15 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<UserDashboard />} />
-          <Route path="selection" element={<ExamSelectionPage />} />
-          <Route path="exam" element={<ExamPage />} />
+          <Route index element={<PermissionGuard permission="viewDashboard"><UserDashboard /></PermissionGuard>} />
+          <Route path="selection" element={<PermissionGuard permission="takeExams"><ExamSelectionPage /></PermissionGuard>} />
+          <Route path="exam" element={<PermissionGuard permission="takeExams"><ExamPage /></PermissionGuard>} />
           <Route path="results" element={<ResultsPage />} />
           <Route path="results/:attemptId" element={<ResultsPage />} />
           <Route path="history" element={<UserAssessmentsPage />} />
           <Route path="scores" element={<UserAssessmentsPage />} />
-          <Route path="review" element={<ReviewModulesPage />} />
+          <Route path="review" element={<PermissionGuard permission="viewReviewModules"><ReviewModulesPage /></PermissionGuard>} />
+          <Route path="announcements" element={<UserAnnouncementsPage />} />
         </Route>
 
         {/* ── 404 Fallback ── */}

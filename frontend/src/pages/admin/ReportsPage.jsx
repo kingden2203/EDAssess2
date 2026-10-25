@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart2, Download, TrendingUp, Users, CheckCircle, Clock } from 'lucide-react';
+import jsPDF from 'jspdf';
 import { reportApi } from '../../api/reportApi';
 
 export default function ReportsPage() {
@@ -22,6 +23,86 @@ export default function ReportsPage() {
     loadReports();
   }, []);
 
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const left = 14;
+      let y = 20;
+
+      doc.setFontSize(16);
+      doc.text('EduAssess - Student Monitor Report', left, y);
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(
+        `Generated: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+        left, y
+      );
+      y += 12;
+
+      doc.setFontSize(13);
+      doc.text('Summary', left, y);
+      y += 8;
+      doc.setFontSize(11);
+      if (summary) {
+        doc.text(`Total submissions: ${summary.total_submissions}`, left, y); y += 7;
+        doc.text(`Average score: ${summary.avg_score}%`, left, y); y += 7;
+        doc.text(`Active students: ${summary.active_students}`, left, y); y += 7;
+        doc.text(`Average duration: ${summary.avg_duration_minutes} min`, left, y); y += 7;
+      } else {
+        doc.text('No summary available.', left, y); y += 7;
+      }
+
+      y += 6;
+      doc.setFontSize(13);
+      doc.text('Exam Performance Summary', left, y);
+      y += 8;
+
+      const cols = { exam: left, subs: 100, avg: 120, pass: 142, dur: 165 };
+      const drawHeader = () => {
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.text('Exam', cols.exam, y);
+        doc.text('Submissions', cols.subs, y);
+        doc.text('Avg. Score', cols.avg, y);
+        doc.text('Pass Rate', cols.pass, y);
+        doc.text('Avg. Duration', cols.dur, y);
+        doc.setFont(undefined, 'normal');
+        y += 3;
+        doc.line(left, y, 196, y);
+        y += 5;
+      };
+      drawHeader();
+
+      if (examStats.length === 0) {
+        doc.setFontSize(10);
+        doc.text('No submissions yet.', left, y);
+      } else {
+        doc.setFontSize(9);
+        examStats.forEach((row) => {
+          const nameLines = doc.splitTextToSize(String(row.exam), 82);
+          const rowHeight = nameLines.length * 5 + 2;
+          if (y + rowHeight > 280) {
+            doc.addPage();
+            y = 20;
+            drawHeader();
+            doc.setFontSize(9);
+          }
+          doc.text(nameLines, cols.exam, y);
+          doc.text(String(row.submissions), cols.subs, y);
+          doc.text(`${row.avg_score}%`, cols.avg, y);
+          doc.text(`${row.pass_rate}%`, cols.pass, y);
+          doc.text(String(row.avg_duration), cols.dur, y);
+          y += rowHeight;
+        });
+      }
+
+      doc.save('student-monitor-report.pdf');
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Could not create the PDF. Please try again.');
+    }
+  };
+
   if (fetching) {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading reports...</div>;
   }
@@ -38,11 +119,11 @@ export default function ReportsPage() {
       {/* Topbar */}
       <div className="admin-topbar">
         <div className="topbar-left">
-          <h1>Reports</h1>
+          <h1>Student Monitor</h1>
           <p>Performance analytics and submission summaries</p>
         </div>
         <div className="topbar-right">
-          <button className="btn btn-secondary btn-sm">
+          <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>
             <Download size={13} /> Export PDF
           </button>
         </div>

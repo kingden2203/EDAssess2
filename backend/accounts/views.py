@@ -366,13 +366,14 @@ class MyPermissionsView(APIView):
 
 
 class SessionConfigView(APIView):
-    """Para sa idle auto-logout. Kahit anong naka-login ay puwedeng bumasa."""
+    """Para sa idle auto-logout at announcements flag. Kahit anong naka-login ay puwedeng bumasa."""
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        s = SystemSettings.load()
         return Response(
-            {'sessionTimeout': SystemSettings.load().sessionTimeout},
+            {'sessionTimeout': s.sessionTimeout, 'announcementsEnabled': s.emailNotifications},
             status=status.HTTP_200_OK,
         )
 

@@ -3,20 +3,25 @@ import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, BookOpen, ClipboardList,
-  BarChart2, LogOut, GraduationCap, Menu, X
+  BarChart2, Megaphone, LogOut, GraduationCap, Menu, X
 } from 'lucide-react';
 import useAuthStore from '../../auth/useAuthStore';
 import authApi from '../../api/authApi';
+import axiosInstance from '../../api/axiosInstance';
+import usePermissions from '../../hooks/usePermissions';
 import ProfileModal from '../../components/ProfileModal';
 import './user.css';
 import '../../styles/dept-theme.css';
 import './user-responsive.css'; // dapat PINAKAHULI para ma-override ang desktop styles
 
+// permKey = permission sa Access Control na nagpapakita/nagtatago ng item.
+// null = walang toggle na naka-tie dito.
 const NAV_ITEMS = [
-  { to: '/dashboard',           label: 'Dashboard',       icon: LayoutDashboard, end: true },
-  { to: '/dashboard/review',    label: 'Review Modules',  icon: BookOpen },
-  { to: '/dashboard/selection', label: 'Take Exam',       icon: ClipboardList },
-  { to: '/dashboard/scores',    label: 'My Scores',       icon: BarChart2 },
+  { to: '/dashboard',               label: 'Dashboard',      icon: LayoutDashboard, end: true, permKey: 'viewDashboard' },
+  { to: '/dashboard/review',        label: 'Review Modules', icon: BookOpen,        permKey: 'viewReviewModules' },
+  { to: '/dashboard/selection',     label: 'Take Exam',      icon: ClipboardList,   permKey: 'takeExams' },
+  { to: '/dashboard/scores',        label: 'My Scores',      icon: BarChart2,       permKey: null },
+  { to: '/dashboard/announcements', label: 'Announcements',  icon: Megaphone,       permKey: null, announcements: true },
 ];
 
 const DRAWER_BREAKPOINT = 900; // dapat kapareho ng max-width sa user-responsive.css
@@ -25,9 +30,18 @@ export default function UserLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { perms } = usePermissions(); // null habang naglo-load o kung nag-fail
+  const [announcementsEnabled, setAnnouncementsEnabled] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const dept = user?.department === 'CIT' ? 'CIT' : 'CTE'; // walang department = CTE
+
+  // Kunin kung naka-on pa ang Announcements (Settings ng super admin)
+  useEffect(() => {
+    axiosInstance.get('/auth/session-config')
+      .then((r) => setAnnouncementsEnabled(r.data?.announcementsEnabled !== false))
+      .catch(() => {});
+  }, [pathname]);
 
   // Isara ang drawer kapag lumipat ng page
   useEffect(() => { setMenuOpen(false); }, [pathname]);
@@ -59,6 +73,14 @@ export default function UserLayout() {
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'ST';
+
+  // Itago ang mga naka-off sa Access Control. Habang naglo-load pa, ipakita muna lahat.
+  const visibleNavItems = NAV_ITEMS.filter(({ permKey, announcements }) => {
+    if (announcements) return announcementsEnabled;
+    if (!permKey) return true;
+    if (!perms) return true;
+    return perms[permKey] !== false;
+  });
 
   return (
     <div className="user-shell dept-shell" data-dept={dept}>
@@ -100,7 +122,7 @@ export default function UserLayout() {
         <div className="user-sidebar-section">
           <div className="user-sidebar-label">Navigation</div>
           <ul className="user-nav">
-            {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+            {visibleNavItems.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
                 <NavLink
                   to={to}

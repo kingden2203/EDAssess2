@@ -64,6 +64,9 @@ export default function ExamSelectionPage() {
 
   const gwa = computeGwa(history || []);
   const myMajors = majorsFor(user?.department);
+  const TIME_KEYS = { GenEd: 'genEd', ProfEd: 'profEd', Major: 'major' };
+  // Ang global time limit ng admin (Exam Config) ang masusunod; kung wala, ang duration ng exam
+  const timeLimitFor = (category, exam) => examConfig?.[TIME_KEYS[category]] ?? exam?.duration_minutes;
 
   useEffect(() => {
     async function loadData() {
@@ -135,7 +138,7 @@ export default function ExamSelectionPage() {
         label:            matchingExam.title,
         short:            exam.short,
         totalItems:       matchingExam.questions.length,
-        durationMin:      matchingExam.duration_minutes,
+        durationMin:      timeLimitFor(category, matchingExam),
         color:            exam.color,
         shuffleQuestions: examConfig?.shuffleQuestions ?? true,
       },
@@ -285,7 +288,7 @@ export default function ExamSelectionPage() {
                 <div className="exam-sel-meta">
                   <div className="exam-sel-meta-row">
                     <Clock size={14} />
-                    <span>Duration: <strong>{matchingExam ? `${matchingExam.duration_minutes} min` : `${exam.hours} Hours`}</strong></span>
+                    <span>Duration: <strong>{matchingExam ? `${timeLimitFor(category, matchingExam)} min` : `${exam.hours} Hours`}</strong></span>
                   </div>
                   <div className="exam-sel-meta-row">
                     <FileText size={14} />

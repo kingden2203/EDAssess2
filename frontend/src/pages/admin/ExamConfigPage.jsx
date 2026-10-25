@@ -39,6 +39,12 @@ export default function ExamConfigPage() {
   };
 
   const handleSave = async () => {
+    const times = [config.genEd, config.profEd, config.major];
+    if (times.some((t) => !Number.isFinite(t) || t < 1)) {
+      alert('Time limits must be at least 1 minute.');
+      return;
+    }
+
     setLoading(true);
     try {
       await adminApi.saveExamConfig(config);
@@ -88,7 +94,7 @@ export default function ExamConfigPage() {
               <div className="admin-card-header">
                 <div>
                   <h3>Time Limits</h3>
-                  <p>Global duration per exam category (in minutes)</p>
+                  <p>Global duration per exam category (in minutes). Applies to every exam of that category.</p>
                 </div>
                 <div className="stat-card-icon blue">
                   <FileText size={15} />
@@ -103,7 +109,7 @@ export default function ExamConfigPage() {
                   <div className="form-input-with-unit">
                     <input
                       type="number"
-                      min={30}
+                      min={1}
                       max={300}
                       value={config.genEd}
                       onChange={(e) => handleChange('genEd', Number(e.target.value))}
@@ -120,7 +126,7 @@ export default function ExamConfigPage() {
                   <div className="form-input-with-unit">
                     <input
                       type="number"
-                      min={30}
+                      min={1}
                       max={300}
                       value={config.profEd}
                       onChange={(e) => handleChange('profEd', Number(e.target.value))}
@@ -137,7 +143,7 @@ export default function ExamConfigPage() {
                   <div className="form-input-with-unit">
                     <input
                       type="number"
-                      min={30}
+                      min={1}
                       max={300}
                       value={config.major}
                       onChange={(e) => handleChange('major', Number(e.target.value))}
@@ -255,7 +261,6 @@ export default function ExamConfigPage() {
                     <span className="toggle-slider" />
                   </label>
                 </div>
-
               </div>
             </div>
 

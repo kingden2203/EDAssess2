@@ -4,10 +4,11 @@ from urllib.parse import quote
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, parsers, serializers
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from accounts.activity import log_activity
-from accounts.models import User, department_of_major
+from accounts.models import User, SystemSettings, department_of_major
 from accounts.permissions import (
     IsInstructor, CanViewReviewModules, apply_dept_scope, apply_major_scope, is_super_admin,
 )
@@ -19,8 +20,7 @@ class IsAdminOrReadOnly(permissions.BasePermission):
     """
     Staff (admin/instructor) ang puwedeng mag-upload/delete anumang oras.
     Para sa read (GET), kailangan pa ring naka-on ang 'viewReviewModules'
-    toggle para sa role ng humihiling — kaya hindi lang basta is_staff check,
-    tumitingin din sa RolePermission matrix.
+    toggle para sa role ng humihiling.
     """
 
     def has_permission(self, request, view):
@@ -41,7 +41,6 @@ class ModuleListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = apply_dept_scope(Module.objects.all(), self.request.user)
-        # Student: Major modules na may major tag ay para lang sa kapareho niyang major
         return apply_major_scope(qs, self.request.user)
 
     def get_serializer_context(self):
@@ -57,14 +56,12 @@ class ModuleListCreateView(generics.ListCreateAPIView):
             if user.role == User.ROLE_INSTRUCTOR and user.major:
                 major = user.major  # naka-lock sa major ng instructor
             if major:
-                # Hinuhulaan ang department mula sa major; dapat nasa department ng uploader
                 department = department_of_major(major)
                 if user.department and department != user.department:
                     raise serializers.ValidationError(
                         {'major': f'{major} is not a {user.department} major.'}
                     )
             elif is_super_admin(user):
-                # Super admin na walang major: puwedeng pumili ng department (blank = shared)
                 chosen = str(self.request.data.get('department') or '').strip().upper()
                 department = chosen if chosen in dict(User.DEPARTMENT_CHOICES) else None
             else:
@@ -98,9 +95,6 @@ class ModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in permissions.SAFE_METHODS:
             return apply_major_scope(apply_dept_scope(qs, user), user)
 
-        # Edit/delete:
-        #  - Department admin: modules ng department niya (o in-upload ng taga-department niya)
-        #  - Instructor: sariling uploads lang
         if user.role == User.ROLE_ADMIN:
             return qs.filter(Q(department=user.department) | Q(uploaded_by__department=user.department))
         return qs.filter(uploaded_by=user)
@@ -125,13 +119,7 @@ class ModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class ModuleDownloadView(APIView):
-    """
-    GET /modules/<id>/download  ->  { "url": "<maikling-buhay na link>", "file_name": "..." }
-
-    Dumadaan sa parehong scope/permission ng listing, kaya hindi makukuha ng student ang module
-    na hindi para sa kanya. Ang link ay pirmadong (signed) S3 URL na nagda-download ng file
-    na may tamang pangalan; ang frontend ang magbubukas nito.
-    """
+    """GET /modules/<id>/download -> { "url": "<signed link>", "file_name": "..." }"""
     permission_classes = [IsAdminOrReadOnly]
 
     def get(self, request, pk):
@@ -147,7 +135,7 @@ class ModuleDownloadView(APIView):
         try:
             exists = storage.exists(name)
         except Exception:
-            exists = True  # hindi ma-verify; subukan pa rin
+            exists = True
         if not exists:
             return Response(gone, status=404)
 
@@ -155,7 +143,7 @@ class ModuleDownloadView(APIView):
         try:
             url = storage.url(name, parameters={'ResponseContentDisposition': disposition}, expire=300)
         except TypeError:
-            url = storage.url(name)  # local FileSystemStorage
+            url = storage.url(name)
         if url.startswith('/'):
             url = request.build_absolute_uri(url)
 
@@ -164,12 +152,17 @@ class ModuleDownloadView(APIView):
 
 class AnnouncementListCreateView(generics.ListCreateAPIView):
     """
-    GET — bukas sa kahit sinong naka-login (students kasama), para makita
-    nila ang mga announcement sa dashboard.
-    POST — instructor lang ang pwedeng gumawa ng bago.
+    GET — bukas sa kahit sinong naka-login. Kapag naka-OFF ang 'Announcements' sa Settings
+        (super admin), walang makikita ang students.
+    POST — instructor lang; hindi puwedeng mag-post kapag naka-OFF.
     """
-    queryset = Announcement.objects.all()
     serializer_class = AnnouncementSerializer
+
+    def get_queryset(self):
+        qs = Announcement.objects.all()
+        if self.request.user.role == User.ROLE_STUDENT and not SystemSettings.load().emailNotifications:
+            return qs.none()
+        return qs
 
     def get_permissions(self):
         if self.request.method == 'POST':
@@ -177,6 +170,8 @@ class AnnouncementListCreateView(generics.ListCreateAPIView):
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
+        if not SystemSettings.load().emailNotifications:
+            raise PermissionDenied('Announcements are turned off by the admin.')
         serializer.save(posted_by=self.request.user)
 
 
