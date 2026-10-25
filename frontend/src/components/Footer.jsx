@@ -11,11 +11,6 @@ export default function Footer() {
         <div className="footer-note">
           © 2026 College of Teacher Education and College of Industrial Technology — President Ramon Magsaysay State University, Iba Main Campus
         </div>
-        <div className="footer-links">
-          {links.map((link) => (
-            <a href="#" key={link}>{link}</a>
-          ))}
-        </div>
       </div>
     </footer>
   );
